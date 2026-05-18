@@ -2,39 +2,39 @@ const express = require("express");
 const { createSession, getNextMessage } = require("./tiktok");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(express.json());
+
+const PORT = process.env.PORT || 8080;
 
 // Health check
 app.get("/", (req, res) => {
     res.send("TikTok Bridge Running");
 });
 
-// Create a session for a TikTok username
+// Create session (SAFE)
 app.post("/create-session", async (req, res) => {
-    const username = (req.body.username || "").replace("@", "").trim();
-
-    if (!username) {
-        return res.status(400).json({
-            error: "Missing username"
-        });
-    }
-
     try {
+        const username = req.body.username;
+
+        console.log("[API] create-session:", username);
+
         const sessionId = await createSession(username);
-        res.json({
+
+        return res.json({
             sessionId
         });
+
     } catch (err) {
-        console.error("Create session failed:", err);
-        res.status(500).json({
-            error: "Failed to create session"
+        console.log("[API ERROR]", err.message);
+
+        return res.status(502).json({
+            error: err.message,
+            success: false
         });
     }
 });
 
-// Return the next queued message for a session
+// Get next message
 app.get("/next", (req, res) => {
     const sessionId = req.query.session;
 
@@ -44,13 +44,14 @@ app.get("/next", (req, res) => {
 
     const message = getNextMessage(sessionId);
 
-    if (message) {
-        res.json(message);
-    } else {
-        res.json(null);
+    if (!message) {
+        return res.json(null);
     }
+
+    res.json(message);
 });
 
+// Start server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log("Server running on port", PORT);
 });
