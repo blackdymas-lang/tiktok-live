@@ -1,77 +1,65 @@
 const { WebcastPushConnection } = require("tiktok-live-connector");
-const crypto = require("crypto");
 
-// sessionId -> { connection, queue }
-const sessions = new Map();
+const sessions = {};
 
+/**
+ * Create TikTok session safely (never crashes server)
+ */
 async function createSession(username) {
-    // Clean username
-    username = username.replace("@", "").trim();
+    try {
+        if (!username) throw new Error("No username provided");
 
-    // Unique session ID
-    const sessionId = crypto.randomBytes(16).toString("hex");
+        console.log("[TikTok] Connecting:", username);
 
-    // Create TikTok connection
-    const connection = new WebcastPushConnection(username);
+        const connection = new WebcastPushConnection(username);
 
-    // Queue for incoming chat messages
-    const queue = [];
+        // IMPORTANT: connect to TikTok LIVE
+        await connection.connect();
 
-    // Connect to TikTok LIVE
-    await connection.connect();
+        const sessionId =
+            Math.random().toString(36).substring(2) +
+            Date.now().toString(36);
 
-    console.log(`Connected to TikTok LIVE: ${username}`);
-    console.log(`Session created: ${sessionId}`);
-
-    // Listen for chat messages
-    connection.on("chat", (data) => {
-        const payload = {
-            user: data.uniqueId,
-            message: data.comment
+        sessions[sessionId] = {
+            connection,
+            queue: []
         };
 
-        queue.push(payload);
+        // Chat listener
+        connection.on("chat", (data) => {
+            if (!sessions[sessionId]) return;
 
-        // Keep queue from growing forever
-        if (queue.length > 500) {
-            queue.shift();
-        }
+            sessions[sessionId].queue.push({
+                user: data.uniqueId,
+                message: data.comment
+            });
+        });
 
-        console.log(`[${username}] ${payload.user}: ${payload.message}`);
-    });
+        // Optional debug
+        connection.on("error", (err) => {
+            console.log("[TikTok ERROR]", err);
+        });
 
-    // Optional logging
-    connection.on("disconnected", () => {
-        console.log(`Disconnected from ${username}`);
-    });
+        console.log("[TikTok] Connected OK:", username);
 
-    connection.on("error", (err) => {
-        console.error(`TikTok error (${username}):`, err);
-    });
+        return sessionId;
 
-    // Save session
-    sessions.set(sessionId, {
-        connection,
-        queue,
-        username,
-        createdAt: Date.now()
-    });
+    } catch (err) {
+        console.log("[TikTok CONNECT FAILED]", err.message || err);
 
-    return sessionId;
+        // IMPORTANT: DO NOT crash server
+        throw new Error("TikTok connection failed: " + (err.message || err));
+    }
 }
 
+/**
+ * Get next message safely
+ */
 function getNextMessage(sessionId) {
-    const session = sessions.get(sessionId);
+    const session = sessions[sessionId];
+    if (!session) return null;
 
-    if (!session) {
-        return null;
-    }
-
-    if (session.queue.length === 0) {
-        return null;
-    }
-
-    return session.queue.shift();
+    return session.queue.shift() || null;
 }
 
 module.exports = {
