@@ -3,30 +3,46 @@ const { WebcastPushConnection } = require("tiktok-live-connector");
 const sessions = {};
 
 async function createSession(username) {
-    const connection = new WebcastPushConnection(username);
+    try {
+        console.log("🔵 Connecting TikTok:", username);
 
-    await connection.connect();
+        const connection = new WebcastPushConnection(username);
 
-    const sessionId = Math.random().toString(36).substring(2);
+        await connection.connect();
 
-    sessions[sessionId] = {
-        queue: [],
-        connection
-    };
+        const sessionId = Math.random().toString(36).slice(2);
 
-    connection.on("chat", (data) => {
-        sessions[sessionId].queue.push({
-            user: data.uniqueId,
-            message: data.comment
+        sessions[sessionId] = {
+            connection,
+            queue: []
+        };
+
+        connection.on("chat", (data) => {
+            if (!sessions[sessionId]) return;
+
+            sessions[sessionId].queue.push({
+                user: data.uniqueId,
+                message: data.comment
+            });
         });
-    });
 
-    return sessionId;
+        console.log("🟢 TikTok CONNECTED");
+
+        return sessionId;
+
+    } catch (err) {
+        console.log("🔴 TikTok FAILED:", err.message);
+
+        // IMPORTANT: return null, do not crash system
+        return null;
+    }
 }
 
 function getNextMessage(sessionId) {
-    if (!sessions[sessionId]) return null;
-    return sessions[sessionId].queue.shift() || null;
+    const s = sessions[sessionId];
+    if (!s) return null;
+
+    return s.queue.shift() || null;
 }
 
 module.exports = { createSession, getNextMessage };
