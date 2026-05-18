@@ -14,22 +14,33 @@ app.post("/create-session", async (req, res) => {
     try {
         const username = req.body.username;
 
+        console.log("🟡 CREATE SESSION:", username);
+
         const sessionId = await createSession(username);
-        sessions[sessionId] = true;
 
-        res.json({ sessionId });
+        if (!sessionId) {
+            console.log("🔴 SESSION FAILED (null returned)");
+            return res.json({ sessionId: null });
+        }
 
-    } catch (e) {
-        console.log("ERROR:", e.message);
-        res.status(502).json({ error: e.message });
+        console.log("🟢 SESSION CREATED:", sessionId);
+
+        return res.json({ sessionId });
+
+    } catch (err) {
+        console.log("❌ ERROR:", err.message);
+        return res.json({ sessionId: null });
     }
 });
 
 app.get("/next", (req, res) => {
     const sessionId = req.query.session;
+
+    if (!sessionId) return res.json(null);
+
     const msg = getNextMessage(sessionId);
 
-    res.json(msg || null);
+    return res.json(msg || null);
 });
 
 app.listen(process.env.PORT || 8080, () => {
